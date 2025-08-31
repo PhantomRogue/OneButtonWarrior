@@ -218,12 +218,12 @@ function Threat()
       CastSpellByName(ABILITY_REND_THREAT);
 	  
 	  -- Only do 5 Sunders if the Target is Elite
-    elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 5 and IsElite()) then
+    elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders <= 5 and IsElite()) then
       Debug("Sunder armor");
       CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
 	  
     -- Sunder to 3 if non Elite
-	elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 3 and not IsElite()) then
+	elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders <= 3 and not IsElite()) then
       Debug("Sunder armor");
       CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
 	  	  
@@ -315,3 +315,4 @@ function Threat_OnEvent(event)
 	end
   end
 end
+

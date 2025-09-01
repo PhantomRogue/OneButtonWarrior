@@ -40,6 +40,7 @@ ABILITY_OVERPOWER_THREAT		  = "Overpower";
 ABILITY_REND_THREAT		  		  = "Rend";
 ABILITY_HAMSTRING_THREAT		  = "Hamstring";
 ABILITY_SLAM_THREAT		  		  = "Slam";
+ABILITY_CLEAVE_THREAT			  = "Cleave";
 
 SLASH_THREAT_ENABLED              = "enabled";
 SLASH_THREAT_DISABLED             = "disabled";

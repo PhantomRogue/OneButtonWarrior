@@ -9,6 +9,8 @@ local RevengeReadyUntil = 0;
 local OPReadyUntil = 0;
 local TankMode = 0;
 local DoSlam = 1;
+local casterGUID, targetGUID, evtype, spellId, castMS;
+local _castBy = {}
 
 function Threat_Configuration_Init()
   if (not Threat_Configuration) then
@@ -181,6 +183,54 @@ function ShieldSlamLearned()
 end
 
 
+local function WhatsInMelee(spell, counter)
+  -- pick a default melee spell per class if none provided (enUS strings)
+  if not spell then
+    local _, class = UnitClass("player")
+    if class == "WARRIOR" then       spell = "Hamstring"
+    elseif class == "ROGUE" then     spell = "Sinister Strike"
+    elseif class == "HUNTER" then    spell = "Raptor Strike"
+    elseif class == "DRUID" then     spell = "Claw"      -- cat form
+    else spell = nil  -- paladin/shaman/mage/priest/warlock fallback to interact distance
+    end
+  end
+
+  local function inMelee(unit)
+    if not UnitExists(unit) or UnitIsDead(unit) or not UnitCanAttack("player", unit) then
+      return false
+    end
+    if spell and IsSpellInRange then
+      return IsSpellInRange(spell, unit) == 1
+    end
+    -- Fallback ~10y check
+    return CheckInteractDistance and CheckInteractDistance(unit, 3) == 1 or false
+  end
+
+  -- dedupe without using #
+  local seen, seenCount = {}, 0
+  local function addIfClose(unit)
+    if inMelee(unit) then
+      for i = 1, seenCount do
+        if UnitIsUnit(seen[i], unit) then return end
+      end
+      seenCount = seenCount + 1
+      seen[seenCount] = unit
+    end
+  end
+
+  addIfClose("target")
+  addIfClose("mouseover")
+  addIfClose("pettarget")
+
+  local p = GetNumPartyMembers and GetNumPartyMembers() or 0
+  for i = 1, p do addIfClose("party"..i.."target") end
+
+  local r = GetNumRaidMembers and GetNumRaidMembers() or 0
+  for i = 1, r do addIfClose("raid"..i.."target") end
+
+  return (seenCount >= counter)
+end
+
 function Threat()
   if (not UnitIsCivilian("target") and UnitClass("player") == CLASS_WARRIOR_THREAT) then
 
@@ -193,6 +243,7 @@ function Threat()
 	
 	local sunders = 0
 	sunders = SunderCount("target");
+	
 
     -- if (activestance() ~= 2 and TankMode == 1) then
       -- debug("changing to def stance");
@@ -202,31 +253,39 @@ function Threat()
     if (SpellReady(ABILITY_BATTLE_SHOUT_THREAT) and not HasBuff("player", "Ability_Warrior_BattleShout") and rage >= 10) then
       Debug("Battle Shout");
       CastSpellByName(ABILITY_BATTLE_SHOUT_THREAT);
+	  
     elseif (SpellReady(ABILITY_SHIELD_SLAM_THREAT) and rage >= 20 and ShieldSlamLearned()) then
       Debug("Shield slam");
       CastSpellByName(ABILITY_SHIELD_SLAM_THREAT);
-	  
-	elseif (SpellReady(ABILITY_OVERPOWER_THREAT) and OPAvail() and rage >= 10) then
+	  	  
+	-- OverPower if we arent swappin stances  
+	elseif (SpellReady(ABILITY_OVERPOWER_THREAT) and OPAvail() and rage >= 5 and TankMode == 0) then
       Debug("OverPower");
-      CastSpellByName(ABILITY_OVERPOWER_THREAT);
+      CastSpellByName(ABILITY_OVERPOWER_THREAT);	  
     elseif (SpellReady(ABILITY_REVENGE_THREAT) and RevengeAvail() and rage >= 5 and TankMode == 1) then
       Debug("Revenge");
       CastSpellByName(ABILITY_REVENGE_THREAT);
 	  
-    elseif (SpellReady(ABILITY_REND_THREAT) and not HasDebuff("target", "Ability_Gouge") and rage >= 10 and not IsTargetElemental()) then
+	  -- Only Rend in DPS Mode, waste of rage for Tank
+    elseif (SpellReady(ABILITY_REND_THREAT) and not HasDebuff("target", "Ability_Gouge") and rage >= 10 and not IsTargetElemental() and TankMode == 0) then
       Debug("Rend");
       CastSpellByName(ABILITY_REND_THREAT);
 	  
 	  -- Only do 5 Sunders if the Target is Elite
-    elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders <= 5 and IsElite()) then
+    elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 5 and IsElite()) then
       Debug("Sunder armor");
       CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
 	  
     -- Sunder to 3 if non Elite
-	elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders <= 3 and not IsElite()) then
+	elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 3 and not IsElite()) then
       Debug("Sunder armor");
       CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
-	  	  
+	
+	elseif (ABILITY_CLEAVE_THREAT) and rage > 20 and WhatsInMelee("hamstring", 1) then
+	  Debug("Cleave");
+	  CastSpellByName(ABILITY_CLEAVE_THREAT);
+	
+    -- Toggle Slam	
 	elseif (SpellReady(ABILITY_SLAM_THREAT) and rage >= 20 and DoSlam == 1) then
       Debug("Slam");
       CastSpellByName(ABILITY_SLAM_THREAT);
@@ -275,6 +334,42 @@ function Threat_SlashCommand(msg)
   end
 end
 
+function TargetIsCasting()
+  if not UnitGUID then return false end -- needs SuperWoW
+  local g = UnitGUID("target")
+  if not g then return false end
+  local rec = _castBy[g]
+  if not rec then return false end
+
+  local now = GetTime()*1000
+  local left = (rec.tEnd or now) - now
+  if left <= 0 then
+    _castBy[g] = nil
+    return false
+  end
+  local name = (GetSpellInfo and GetSpellInfo(rec.spellId)) or ("SpellID "..tostring(rec.spellId))
+  return true, name, left
+end
+
+
+function CheckSpell(casterGUID, targetGUID, evtype, spellId, castMS)
+  -- only care about "START" (cast begin)
+  --print(evtype);
+  if evtype ~= "START" then return end
+
+  -- compare the caster to your current "target" via GUID (SuperWoW exposes UnitGUID)
+  local myTarget = UnitGUID and UnitGUID("target")
+  --print("Target" + myTarget);
+  --print("spelltaret" + targetGUID);
+  
+  if not myTarget or casterGUID ~= myTarget then return end
+
+  -- try to get a spell name if available; fall back to the ID
+  local spellName = (GetSpellInfo and (GetSpellInfo(spellId))) or ("SpellID "..tostring(spellId))
+
+  Print("|cff33ff99Target casting:|r %s (%s ms)", tostring(spellName), tostring(castMS or "?"));
+end
+
 -- Event Handlers
 
 function Threat_OnLoad()
@@ -286,6 +381,7 @@ function Threat_OnLoad()
   this:RegisterEvent("CHAT_MSG_COMBAT_SELF_MISSES");
   this:RegisterEvent("CHAT_MSG_SPELL_SELF_DAMAGE");
   this:RegisterEvent("CHAT_MSG_SPELL_DAMAGESHIELDS_ON_SELF");
+  this:RegisterEvent("UNIT_CASTEVENT");
   
   ThreatLastSpellCast = GetTime();
   ThreatLastStanceCast = GetTime();
@@ -310,9 +406,16 @@ function Threat_OnEvent(event)
   elseif event == "CHAT_MSG_SPELL_DAMAGESHIELDS_ON_SELF" or event == "CHAT_MSG_SPELL_SELF_DAMAGE" or event == "CHAT_MSG_COMBAT_SELF_MISSES" then
 	if string.find(arg1,"dodge") then
 	 Debug("Enemy Dodged");
-	 Print("Dodged");
 	 OPReadyUntil = GetTime() + 4; 
 	end
+  elseif event == "UNIT_CASTEVENT" then
+	casterGUID, targetGUID, evtype, spellId, castMS = arg1, arg2, arg3, arg4, arg5;
+	CheckSpell(casterGUID, targetGUID, evtype, spellId, castMS);
+	-- local now = GetTime()*1000
+    -- if evtype == "START" or evtype == "CHANNEL" then
+	 -- _castBy[casterGUID] = { spellId = spellId, tEnd = now + (tonumber(castMS) or 0) }
+	-- elseif evtype == "CAST" or evtype == "FAIL" or evtype == "INTERRUPT" or evtype == "STOP" then
+	 -- _castBy[casterGUID] = nil
+	-- end
   end
 end
-

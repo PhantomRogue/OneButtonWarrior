@@ -8,9 +8,10 @@
 local RevengeReadyUntil = 0;
 local OPReadyUntil = 0;
 local TankMode = 0;
-local DoSlam = 1;
+local DoSlam = 0;
 local casterGUID, targetGUID, evtype, spellId, castMS;
 local _castBy = {}
+local GroupMode = 0;
 
 function Threat_Configuration_Init()
   if (not Threat_Configuration) then
@@ -167,7 +168,7 @@ end
 
 function IsTargetElemental()
   local t = UnitCreatureType("target")
-  return t ~= nil and t == "Elemental"   -- enUS/enGB
+  return t ~= nil and (t == "Elemental" or t == "Mechanical" or t == "Undead")   -- enUS/enGB
 end
 
 
@@ -180,6 +181,18 @@ function ShieldSlamLearned()
       return nil;
     end
   end
+end
+
+function GetTargetHPPercent()
+    if not UnitExists("target") then
+        return nil
+    end
+    local hp  = UnitHealth("target")      -- current health
+    local max = UnitHealthMax("target")   -- max health
+    if max == 0 then
+        return 0
+    end
+    return (hp / max) * 100
 end
 
 
@@ -245,56 +258,92 @@ function Threat()
 	sunders = SunderCount("target");
 	
 
-    -- if (activestance() ~= 2 and TankMode == 1) then
-      -- debug("changing to def stance");
-      -- castspellbyname(ability_defensive_stance_threat);
-    -- end
 
+	
+	-- Always Battle Shout
     if (SpellReady(ABILITY_BATTLE_SHOUT_THREAT) and not HasBuff("player", "Ability_Warrior_BattleShout") and rage >= 10) then
       Debug("Battle Shout");
       CastSpellByName(ABILITY_BATTLE_SHOUT_THREAT);
+	end
 	  
-    elseif (SpellReady(ABILITY_SHIELD_SLAM_THREAT) and rage >= 20 and ShieldSlamLearned()) then
-      Debug("Shield slam");
-      CastSpellByName(ABILITY_SHIELD_SLAM_THREAT);
-	  	  
-	-- OverPower if we arent swappin stances  
-	elseif (SpellReady(ABILITY_OVERPOWER_THREAT) and OPAvail() and rage >= 5 and TankMode == 0) then
-      Debug("OverPower");
-      CastSpellByName(ABILITY_OVERPOWER_THREAT);	  
-    elseif (SpellReady(ABILITY_REVENGE_THREAT) and RevengeAvail() and rage >= 5 and TankMode == 1) then
-      Debug("Revenge");
-      CastSpellByName(ABILITY_REVENGE_THREAT);
-	  
-	  -- Only Rend in DPS Mode, waste of rage for Tank
-    elseif (SpellReady(ABILITY_REND_THREAT) and not HasDebuff("target", "Ability_Gouge") and rage >= 10 and not IsTargetElemental() and TankMode == 0) then
-      Debug("Rend");
-      CastSpellByName(ABILITY_REND_THREAT);
-	  
-	  -- Only do 5 Sunders if the Target is Elite
-    elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 5 and IsElite()) then
-      Debug("Sunder armor");
-      CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
-	  
-    -- Sunder to 3 if non Elite
-	elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 3 and not IsElite()) then
-      Debug("Sunder armor");
-      CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
 	
-	elseif (ABILITY_CLEAVE_THREAT) and rage > 20 and WhatsInMelee("hamstring", 1) then
-	  Debug("Cleave");
-	  CastSpellByName(ABILITY_CLEAVE_THREAT);
-	
-    -- Toggle Slam	
-	elseif (SpellReady(ABILITY_SLAM_THREAT) and rage >= 20 and DoSlam == 1) then
-      Debug("Slam");
-      CastSpellByName(ABILITY_SLAM_THREAT);
-	  
-    elseif (SpellReady(ABILITY_HEROIC_STRIKE_THREAT) and rage >= 25) then
-      Debug("Heroic strike");
-      CastSpellByName(ABILITY_HEROIC_STRIKE_THREAT);
-    end
+	-- Time to clean up the Rotation.  We now can get Mob Percent health, so we can stop wasting Rage on Sunders if mob is lower
 
+	-- Tanking Rotation
+	if (TankMode == 1) then
+	    if (ActiveStance() ~= 2) then
+			Debug("changing to def stance");
+			CastSpellByName(ABILITY_DEFENSIVE_STANCE_THREAT);
+		end
+		-- Highest Prio Shield, use a "Toggle" that when we fire an attack, skip to the end, dont rage dump on less prio things
+		if (SpellReady(ABILITY_SHIELD_SLAM_THREAT) and rage >= 20 and ShieldSlamLearned() and AttackQueued == 0) then
+			Debug("Shield slam");
+			CastSpellByName(ABILITY_SHIELD_SLAM_THREAT);
+			AttackQueued = 1;
+		-- Ignore Queue for Revenge, its bis
+		elseif (SpellReady(ABILITY_REVENGE_THREAT) and RevengeAvail() and rage >= 5) then
+			Debug("Revenge");
+			CastSpellByName(ABILITY_REVENGE_THREAT);
+			AttackQueued = 1;					
+
+		-- Only do 5 Sunders if the Target is Elite
+		-- Also, stop sundering if a mob is under 30%, to save rage dump
+		elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 5 and IsElite() and GetTargetHPPercent() > 31 and AttackQueued == 0) then
+		  Debug("Sunder armor");
+		  CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
+		  
+		-- Sunder to 3 if non Elite, Still checking mob HP due to better rage spenders
+		elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 3 and not IsElite() and GetTargetHPPercent() > 31 and AttackQueued == 0) then
+		  Debug("Sunder armor");
+		  CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
+		
+				  
+		elseif (SpellReady(ABILITY_HEROIC_STRIKE_THREAT) and rage >= 25 and AttackQueued == 0) then
+		  Debug("Heroic strike");
+		  CastSpellByName(ABILITY_HEROIC_STRIKE_THREAT);
+		end
+	-- DPS Rotation
+	else 
+		if (SpellReady(ABILITY_OVERPOWER_THREAT) and OPAvail() and rage >= 5) then
+		  Debug("OverPower");
+		  CastSpellByName(ABILITY_OVERPOWER_THREAT);	  
+			
+		elseif (SpellReady(ABILITY_EXECUTE_THREAT) and rage >= 15 and GetTargetHPPercent() < 20 and AttackQueued == 0) then
+		  Debug("Execute");
+		  CastSpellByName(ABILITY_EXECUTE_THREAT);
+				  
+		  -- Only Rend in DPS Mode, waste of rage for Tank
+		elseif (SpellReady(ABILITY_REND_THREAT) and not HasDebuff("target", "Ability_Gouge") and rage >= 10 and not IsTargetElemental() and GroupMode == 0 and AttackQueued == 0) then
+		  Debug("Rend");
+		  CastSpellByName(ABILITY_REND_THREAT);
+		  
+		  -- Only do 5 Sunders if the Target is Elite
+		elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 5 and IsElite() and GetTargetHPPercent() > 30 and AttackQueued == 0) then
+		  Debug("Sunder armor");
+		  CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
+		  
+		-- Sunder to 3 if non Elite
+		elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 3 and not IsElite() and GetTargetHPPercent() > 30 and AttackQueued == 0) then
+		  Debug("Sunder armor");
+		  CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
+		
+		elseif (ABILITY_CLEAVE_THREAT) and rage > 20 and WhatsInMelee("hamstring", 2) and AttackQueued == 0 then
+		  Debug("Cleave");
+		  CastSpellByName(ABILITY_CLEAVE_THREAT);
+		
+		-- Toggle Slam	
+		-- Commenting out Slam, seems never to be useful
+		-- elseif (SpellReady(ABILITY_SLAM_THREAT) and rage >= 20 and DoSlam == 1) then
+		  -- Debug("Slam");
+		  -- CastSpellByName(ABILITY_SLAM_THREAT);
+		  
+		elseif (SpellReady(ABILITY_HEROIC_STRIKE_THREAT) and rage >= 25) then
+		  Debug("Heroic strike");
+		  CastSpellByName(ABILITY_HEROIC_STRIKE_THREAT);
+		end
+	-- End Dps/Tank If
+	end
+	
   end
 end
 
@@ -315,13 +364,15 @@ function Threat_SlashCommand(msg)
       Threat_Configuration["Debug"] = true;
       Print(BINDING_HEADER_THREAT .. ": " .. SLASH_THREAT_DEBUG .. " " .. SLASH_THREAT_ENABLED .. ".")
     end
-  elseif (command == "tankmode") then
-	  TankMode = 1;
-	  Print("Tank Mode On");
-  elseif (command == "dpsmode") then
-      TankMode = 0;
-	  Print("Tank Mode Off");
-  elseif (command == "slamtoggle") then
+  elseif (command == "tankmode" or command == "dps" or command == "tank" or command == "dpsmode" ) then
+	  if TankMode == 0 then
+	    TankMode = 1;
+		Print("Tanking");
+	  else
+	    TankMode = 0;
+		Print("DPSn");
+	  end
+  elseif (command == "slam") then
 	  if DoSlam == 0 then
 	    DoSlam = 1;
 		Print("Slamming");
@@ -329,6 +380,14 @@ function Threat_SlashCommand(msg)
 	    DoSlam = 0;
 		Print("Not Slamming");
 	  end	  
+  elseif (command == "group" or command == "solo") then
+	  if GroupMode == 0 then
+	    GroupMode = 1;
+		Print("Group DPS");
+	  else
+	    GroupMode = 0;
+		Print("Solo DPS");
+	  end	
   else	  
     Print(SLASH_THREAT_HELP)
   end
@@ -382,6 +441,7 @@ function Threat_OnLoad()
   this:RegisterEvent("CHAT_MSG_SPELL_SELF_DAMAGE");
   this:RegisterEvent("CHAT_MSG_SPELL_DAMAGESHIELDS_ON_SELF");
   this:RegisterEvent("UNIT_CASTEVENT");
+  this:RegisterEvent("CHAT_MSG_COMBAT_SELF_HITS");
   
   ThreatLastSpellCast = GetTime();
   ThreatLastStanceCast = GetTime();
@@ -408,6 +468,11 @@ function Threat_OnEvent(event)
 	 Debug("Enemy Dodged");
 	 OPReadyUntil = GetTime() + 4; 
 	end
+	local _, _, spell, outcome = string.find(arg1, "^Your%s+(.+)%s+(hits.+)$")
+	if spell then
+        Debug(string.format("|cffff6666Ability|r: %s -> %s", spell, outcome))
+		AttackQueued = 0;
+    end
   elseif event == "UNIT_CASTEVENT" then
 	casterGUID, targetGUID, evtype, spellId, castMS = arg1, arg2, arg3, arg4, arg5;
 	CheckSpell(casterGUID, targetGUID, evtype, spellId, castMS);

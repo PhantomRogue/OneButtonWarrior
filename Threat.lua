@@ -12,6 +12,7 @@ local DoSlam = 0;
 local casterGUID, targetGUID, evtype, spellId, castMS;
 local _castBy = {}
 local GroupMode = 0;
+local AttackQueued = 0;
 
 function Threat_Configuration_Init()
   if (not Threat_Configuration) then
@@ -285,22 +286,30 @@ function Threat()
 			Debug("Revenge");
 			CastSpellByName(ABILITY_REVENGE_THREAT);
 			AttackQueued = 1;					
-
+		
+		elseif (ABILITY_CLEAVE_THREAT) and rage > 20 and WhatsInMelee("hamstring", 2) and AttackQueued == 0 then
+		  Debug("Cleave");
+		  CastSpellByName(ABILITY_CLEAVE_THREAT);
+		  AttackQueued = 1;		  
+		  
 		-- Only do 5 Sunders if the Target is Elite
 		-- Also, stop sundering if a mob is under 30%, to save rage dump
 		elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 5 and IsElite() and GetTargetHPPercent() > 31 and AttackQueued == 0) then
 		  Debug("Sunder armor");
 		  CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
+		  AttackQueued = 1;
 		  
 		-- Sunder to 3 if non Elite, Still checking mob HP due to better rage spenders
 		elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 3 and not IsElite() and GetTargetHPPercent() > 31 and AttackQueued == 0) then
 		  Debug("Sunder armor");
 		  CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
-		
+		  AttackQueued = 1;
+	
 				  
 		elseif (SpellReady(ABILITY_HEROIC_STRIKE_THREAT) and rage >= 25 and AttackQueued == 0) then
 		  Debug("Heroic strike");
 		  CastSpellByName(ABILITY_HEROIC_STRIKE_THREAT);
+		  AttackQueued = 1;
 		end
 	-- DPS Rotation
 	else 

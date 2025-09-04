@@ -315,30 +315,36 @@ function Threat()
 	else 
 		if (SpellReady(ABILITY_OVERPOWER_THREAT) and OPAvail() and rage >= 5) then
 		  Debug("OverPower");
-		  CastSpellByName(ABILITY_OVERPOWER_THREAT);	  
+		  CastSpellByName(ABILITY_OVERPOWER_THREAT);
+		  AttackQueued = 1;		  
 			
 		elseif (SpellReady(ABILITY_EXECUTE_THREAT) and rage >= 15 and GetTargetHPPercent() < 20 and AttackQueued == 0) then
 		  Debug("Execute");
 		  CastSpellByName(ABILITY_EXECUTE_THREAT);
+		  AttackQueued = 1;		  
 				  
 		  -- Only Rend in DPS Mode, waste of rage for Tank
 		elseif (SpellReady(ABILITY_REND_THREAT) and not HasDebuff("target", "Ability_Gouge") and rage >= 10 and not IsTargetElemental() and GroupMode == 0 and AttackQueued == 0) then
 		  Debug("Rend");
 		  CastSpellByName(ABILITY_REND_THREAT);
+		  AttackQueued = 1;		  
 		  
 		  -- Only do 5 Sunders if the Target is Elite
 		elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 5 and IsElite() and GetTargetHPPercent() > 30 and AttackQueued == 0) then
 		  Debug("Sunder armor");
 		  CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
+		  AttackQueued = 1;		  
 		  
 		-- Sunder to 3 if non Elite
 		elseif (SpellReady(ABILITY_SUNDER_ARMOR_THREAT) and rage >= 15 and sunders < 3 and not IsElite() and GetTargetHPPercent() > 30 and AttackQueued == 0) then
 		  Debug("Sunder armor");
 		  CastSpellByName(ABILITY_SUNDER_ARMOR_THREAT);
+		  AttackQueued = 1;		  
 		
 		elseif (ABILITY_CLEAVE_THREAT) and rage > 20 and WhatsInMelee("hamstring", 2) and AttackQueued == 0 then
 		  Debug("Cleave");
 		  CastSpellByName(ABILITY_CLEAVE_THREAT);
+		  AttackQueued = 1;		  
 		
 		-- Toggle Slam	
 		-- Commenting out Slam, seems never to be useful
@@ -349,6 +355,7 @@ function Threat()
 		elseif (SpellReady(ABILITY_HEROIC_STRIKE_THREAT) and rage >= 25) then
 		  Debug("Heroic strike");
 		  CastSpellByName(ABILITY_HEROIC_STRIKE_THREAT);
+		  AttackQueued = 1;
 		end
 	-- End Dps/Tank If
 	end

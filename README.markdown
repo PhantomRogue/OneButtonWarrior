@@ -18,9 +18,8 @@ Create a macro to call `Threat()` or `/threat`:
 
     /threat             Cast "best" threat ability
     /threat debug       Toggle debug messages on/off
-    /threat tankmode    Turns on Revenge/Def Stance Swap
-    /threat dpsmode     Turns on DPS mode, wont revenge or swap to def stance
-    /thread slamtoggle    Slams?
+    /threat tank|dps|tankmode|dpsmode    Toggles between Tank/Defensive Stance and Battle/DPS stance.  Tank will use Tank abilities, DPS will use DPS
+    /thread slam        Toggle Slams -- Disabled or now, Slam sucks
 
 ## Bugtracker
 
@@ -29,3 +28,10 @@ Create a macro to call `Threat()` or `/threat`:
 Many of the boilerplate functions are taken directly from `Fury.lua` by Bhaerau
 (http://www.vanilla-addons.com/dls/fury/).
 Added to Base Threat from muellerj
+
+
+## Notes
+    Will stack sunders to 5 on elites, 3 on normals, will stop sundering if mob is low
+    Will try to priorities Executes
+    Cleave support if more than 1 mob in range, low priority
+    Rage Dump Heroic Stike - Lowest Priority
